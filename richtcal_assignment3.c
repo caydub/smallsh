@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <dirent.h>
+#include <unistd.h>
 
 /* --------------- MACROS --------------- */
 #define INPUT_LENGTH 	 2048
@@ -33,7 +33,6 @@ struct command_line
 
 /* ---------- Global Variables ---------- */
 struct process* head = NULL;
-struct process* tail = NULL;
 int last_status;
 
 /* --------------------------------------------------------------------------------------------
@@ -41,7 +40,7 @@ Function killAllProcesses: Terminate all processes
 args ~
 None
 returns ~
-0 if successful, 1 if not
+0 when complete
 ----------------------------------------------------------------------------------------------- */
 int killAllProcesses()
 {
@@ -56,15 +55,32 @@ int killAllProcesses()
 /* --------------------------------------------------------------------------------------------
 Function changeDirectory: Changes the working directory of smallsh
 args ~
-None
+- curr_command:			Parsed Inline Command			(struct command_line*)
 returns ~
-0 if successful, 1 if not
+0 if successful, -1 if not
 ----------------------------------------------------------------------------------------------- */
 int changeDirectory (struct command_line* curr_command)
 {
-	if (curr_command->argc == 1) {
-		
+	if (curr_command->argc > 1) {
+		if (chdir(curr_command->argv[1]) == -1) {
+			perror("Error");
+			return -1;
+		} 
+	} else {
+		chdir(getenv("HOME"));
 	}
+	return 0;
+}
+
+/* --------------------------------------------------------------------------------------------
+Function printStatus: Prints out exit status or terminating signal of last ran fg process
+args ~
+None
+returns ~
+0 if successful, -1 if not
+----------------------------------------------------------------------------------------------- */
+int printStatus ()
+{
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -85,7 +101,7 @@ int handleBuiltInFunction(char** builtInFunctions, struct command_line* curr_com
 					killAllProcesses();	
 					break;
 				case 1: // change directory
-					changeDirectory();
+					changeDirectory(curr_command);
 					break;
 				case 2: // print last fg exit status/terminating signal
 					printStatus();
