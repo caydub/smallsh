@@ -34,7 +34,7 @@ struct command_line
 /* ---------- Global Variables ---------- */
 struct process* head = NULL;
 int last_status;
-int exit_flag = 0, is_built_in_function = 0;
+int exit_flag = 0;
 
 /* --------------------------------------------------------------------------------------------
 Function killAllProcesses: Terminate all processes
@@ -86,14 +86,17 @@ int printStatus ()
 }
 
 /* --------------------------------------------------------------------------------------------
-Function handleBuiltInFunction: Determine if command is a built in function. If it is, then
+Function handleBuiltInFunctions: Determine if command is a built in function. If it is, then
 handle accordingly
 args ~
 - curr_command:			Parsed Inline Command						(struct command_line*)
 returns ~
-0 if successful, -1 if not
+0 when complete
+side effects ~
+exit_flag is set if exit command is received
+is_built_in_function is set if command is a built in function
 ----------------------------------------------------------------------------------------------- */
-int handleBuiltInFunction(struct command_line* curr_command)
+int handleBuiltInFunctions(struct command_line* curr_command)
 {
 	char *built_in_functions[] = {"exit", "cd", "status"};
 	int i;
@@ -110,10 +113,10 @@ int handleBuiltInFunction(struct command_line* curr_command)
 					printStatus();
 					break;
 			}
-			is_built_in_function = 1;
+			return 0;
         }
     }
-    return 0;
+    return 1;
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -160,13 +163,9 @@ int main()
 	{
 		curr_command = parse_input();
 
-		handleBuiltInFunction(curr_command);
-		if (is_built_in_function) {
-			is_built_in_function = 0;
+		if (handleBuiltInFunctions(curr_command)) {
 			continue;
 		}
-
-
 	}
 	return EXIT_SUCCESS;
 }
