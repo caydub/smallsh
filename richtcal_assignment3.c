@@ -3,8 +3,10 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 /* --------------- MACROS --------------- */
 #define INPUT_LENGTH 	 2048
@@ -33,7 +35,7 @@ struct command_line
 
 /* ---------- Global Variables ---------- */
 struct process* head = NULL;
-int last_status;
+int child_status;
 int exit_flag = 0;
 
 /* --------------------------------------------------------------------------------------------
@@ -42,6 +44,8 @@ args ~
 None
 returns ~
 0 when complete
+side effects ~
+exit_flag is set, terminating the shell when returned to main
 ----------------------------------------------------------------------------------------------- */
 int killAllProcesses()
 {
@@ -79,24 +83,24 @@ Function printStatus: Prints out exit status or terminating signal of last ran f
 args ~
 None
 returns ~
-0 if successful, -1 if not
+0 if successful
 ----------------------------------------------------------------------------------------------- */
 int printStatus ()
 {
+	return 0;
 }
 
 /* --------------------------------------------------------------------------------------------
-Function handleBuiltInFunctions: Determine if command is a built in function. If it is, then
+Function handleBuiltInCommands: Determine if command is a built in. If it is, then
 handle accordingly
 args ~
-- curr_command:			Parsed Inline Command						(struct command_line*)
+- curr_command:			Parsed Inline Command			(struct command_line*)
 returns ~
-0 when complete
+1 if command is a built in function, 0 otherwise
 side effects ~
-exit_flag is set if exit command is received
-is_built_in_function is set if command is a built in function
+exit_flag is set if exit command is received, terminating the shell when returned to main
 ----------------------------------------------------------------------------------------------- */
-int handleBuiltInFunctions(struct command_line* curr_command)
+int handleBuiltInCommands(struct command_line* curr_command)
 {
 	char *built_in_functions[] = {"exit", "cd", "status"};
 	int i;
@@ -113,18 +117,108 @@ int handleBuiltInFunctions(struct command_line* curr_command)
 					printStatus();
 					break;
 			}
-			return 0;
+			return 1;
         }
     }
-    return 1;
+    return 0;
+}
+
+/* --------------------------------------------------------------------------------------------
+Function createArgArray: Create an array containing arguments that is readable for
+execv functions. The input array is obtained from the curr_command member argv
+args ~
+- curr_command:			Parsed inline command				(struct command_line*)
+- execvp_args:			Array to transfer arguments into	(char**)
+----------------------------------------------------------------------------------------------- */
+int createArgArray(struct command_line* curr_command, char* execvp_args[curr_command->argc])
+{
+	for (int i = 0; i < curr_command->argc - 1; i++) {
+		execvp_args[i] = strdup(curr_command->argv[i+1]);
+	}
+	execvp_args[curr_command->argc - 1] = NULL; // set last value of array to null
+	return 0;
+}
+
+/* --------------------------------------------------------------------------------------------
+Function freeArgArray: Free memory allocated for arg array
+args ~
+- execvp_args:			Array to free		(char**)
+----------------------------------------------------------------------------------------------- */
+int freeArgArray(char** execvp_args, int arr_count)
+{
+	for (int i = 0; i < arr_count; i++) {
+		free(execvp_args[i]);
+	}
+	return 0;
+}
+
+/* --------------------------------------------------------------------------------------------
+Function handleCommands: Determine if command is valid. If it is, then
+handle accordingly. This function is not for built in commands
+args ~
+- curr_command:			Parsed Inline Command			(struct command_line*)
+----------------------------------------------------------------------------------------------- */
+int handleCommands(struct command_line* curr_command)
+{
+	char* execvp_args[curr_command->argc]; // remember to free this array
+	createArgArray(curr_command, execvp_args);
+    pid_t spawn_pid = fork();
+
+	switch (spawn_pid) {
+		case -1: // error forking
+			perror("fork()");
+			exit(EXIT_FAILURE);
+			break;
+
+		case 0:	// child process executes this branch
+			// redirect stdin if there is an input file
+			if (curr_command->input_file != NULL) {
+				int source_fd = open(curr_command->input_file, O_RDONLY, 0644);
+				if (source_fd == -1) { 
+    				perror("source open()");
+					child_status = 1;
+  				}
+				int redirect_input_fd = dup2(source_fd, 0); // point stdin to input file
+				if (redirect_input_fd == -1) { 
+    				perror("source dup2()");
+					child_status = 1;
+  				}
+			}
+
+			// redirect stdout if there is an output file
+			if (curr_command->output_file != NULL) {
+				int dest_fd = open(curr_command->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+				if (dest_fd == -1) { 
+    				perror("dest open()"); 
+    				child_status = 1;
+  				}
+				int redirect_output_fd = dup2(dest_fd, 1); // point stdout to output file
+				if (redirect_output_fd == -1) { 
+    				perror("dest dup2()"); 
+    				child_status = 1; 
+  				}
+			}
+
+			// execute new process
+			execvp(curr_command->argv[1], execvp_args);
+			perror("execvp");	// this line is executed if execvp fails
+			child_status = 1;
+			exit(EXIT_FAILURE);
+			break;
+
+		default: // parent process executes this branch
+			spawn_pid = waitpid(spawn_pid, &child_status, 0);
+			break;
+	}
+
+	freeArgArray(execvp_args, curr_command->argc);
+	return 0;
 }
 
 /* --------------------------------------------------------------------------------------------
 Function command_line: Parse inline commands inputted into shell
-
 args ~
 None
-
 returns ~
 - curr_command:		Parsed Inline Command	(struct command_line*)
 ----------------------------------------------------------------------------------------------- */
@@ -132,6 +226,8 @@ struct command_line *parse_input()
 {
 	char input[INPUT_LENGTH];
 	struct command_line *curr_command = (struct command_line *) calloc(1, sizeof(struct command_line));
+	curr_command->input_file = NULL;
+	curr_command->output_file = NULL;
 
 	// Get input
 	printf(": ");
@@ -162,10 +258,11 @@ int main()
 	while(!exit_flag)
 	{
 		curr_command = parse_input();
-
-		if (handleBuiltInFunctions(curr_command)) {
+		if (handleBuiltInCommands(curr_command)) {
 			continue;
 		}
+
+		handleCommands(curr_command);
 	}
 	return EXIT_SUCCESS;
 }
