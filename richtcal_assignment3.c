@@ -13,7 +13,7 @@
 #define MAX_ARGS		 512
 
 /* ----------------------------------------------------------------
-Linked list for managing processes
+Linked list for managing background processes
 ------------------------------------------------------------------- */
 struct process
 {
@@ -70,7 +70,6 @@ int changeDirectory (struct command_line* curr_command)
 	if (curr_command->argc > 1) {
 		if (chdir(curr_command->argv[1]) == -1) {
 			perror("Error");
-			return -1;
 		} 
 	} else {
 		chdir(getenv("HOME"));
@@ -102,7 +101,7 @@ exit_flag is set if exit command is received, terminating the shell when returne
 ----------------------------------------------------------------------------------------------- */
 int handleBuiltInCommands(struct command_line* curr_command)
 {
-	char *built_in_functions[] = {"exit", "cd", "status", "#"};
+	char *built_in_functions[] = {"exit", "cd", "status"};
 	int i;
     for (i = 0; i < 3; i++) {
         if (!strcmp(built_in_functions[i], curr_command->argv[0])) {
@@ -160,7 +159,7 @@ args ~
 ----------------------------------------------------------------------------------------------- */
 int handleCommands(struct command_line* curr_command)
 {
-	char* execvp_args[curr_command->argc]; // remember to free this array
+	char* execvp_args[curr_command->argc];
 	createArgArray(curr_command, execvp_args);
     pid_t spawn_pid = fork();
 
@@ -216,7 +215,7 @@ int handleCommands(struct command_line* curr_command)
 }
 
 /* --------------------------------------------------------------------------------------------
-Function command_line: Parse inline commands inputted into shell
+Function parse_input: Parse inline commands inputted into shell
 args ~
 None
 returns ~
@@ -229,25 +228,27 @@ struct command_line *parse_input()
 	curr_command->input_file = NULL;
 	curr_command->output_file = NULL;
 
-	// Get input
+	// retrieve input from terminal
 	printf(": ");
 	fflush(stdout);
 	fgets(input, INPUT_LENGTH, stdin);
 
-	// Tokenize the input
+	// parse input
 	char *token = strtok(input, " \n");
-	while(token){
-		if(!strcmp(token,"<")){
-			curr_command->input_file = strdup(strtok(NULL," \n"));
-		} else if(!strcmp(token,">")){
-			curr_command->output_file = strdup(strtok(NULL," \n"));
-		} else if(!strcmp(token,"&")){
-			curr_command->is_bg = true;
-		} else{
+	while(token) {
+		// parse input while ignoring special characters
+		if(!strcmp(token,"<")) { // if redirect input later on
+			curr_command->input_file = strdup(strtok(NULL," \n")); 
+		} else if(!strcmp(token,">")) { // if redirect output later on
+			curr_command->output_file = strdup(strtok(NULL," \n")); 
+		} else if(!strcmp(token,"&")) { // if process will run in the background
+			curr_command->is_bg = true; 
+		} else {
 			curr_command->argv[curr_command->argc++] = strdup(token);
 		}
 		token=strtok(NULL," \n");
 	}
+
 	return curr_command;
 }
 
