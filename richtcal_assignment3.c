@@ -17,7 +17,7 @@ Linked list for managing background processes
 ------------------------------------------------------------------- */
 struct process
 {
-	int pid;
+	pid_t pid;
 	struct process* next;
 };
 
@@ -68,7 +68,7 @@ args~
 returns~
 0 when complete
 ------------------------------------------------------------------- */
-int addProcess (int pid)
+int addProcess (pid_t pid)
 {
 	struct process* curr_process = malloc(sizeof(struct process));
 	curr_process->pid = pid;
@@ -92,7 +92,7 @@ args~
 returns~
 0 when complete
 ------------------------------------------------------------------- */
-int removeProcess (int pid)
+int removeProcess (pid_t pid)
 {
 	struct process* process = head;
 	struct process* prev_process = NULL;
@@ -118,6 +118,30 @@ int removeProcess (int pid)
 		}
 	}
 	return 0;
+}
+
+/* ----------------------------------------------------------------
+Function checkBgs: Check bg processes to see if any have terminated
+args~
+None
+returns~
+0 when complete
+------------------------------------------------------------------- */
+int checkBgs () 
+{
+	struct process* process = head;
+
+	while (process != NULL) {
+		pid_t bg_pid = waitpid(process->pid, &last_bg_child_status, WNOHANG);
+		if (bg_pid) {
+			printf("background pid %d is done: \n", bg_pid);
+			fflush(stdout);
+			process = process->next;
+			removeProcess(bg_pid);
+			continue;
+		}
+		process = process->next;
+	}
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -366,13 +390,13 @@ int handleCommands(struct command_line* curr_command)
 
 		default: // parent process executes this branch
 			if (curr_command->is_bg) {
+				printf("background pid is %d\n", spawn_pid);
+				addProcess(spawn_pid);
 				spawn_pid = waitpid(spawn_pid, &last_bg_child_status, WNOHANG);
-
 			} else {
 				spawn_pid = waitpid(spawn_pid, &last_fg_child_status, 0);
 			}
 			break;
-			
 	}
 
 	freeArgArray(execvp_args, curr_command->argc);
@@ -424,6 +448,9 @@ int main()
 
 	while(!exit_flag)
 	{
+		// check background processes
+		checkBgs();
+
 		curr_command = parse_input();
 
 		if (!strcmp(curr_command->argv[0], "#") || curr_command->argv[0][0] == '#') {
