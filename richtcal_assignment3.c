@@ -35,8 +35,90 @@ struct command_line
 
 /* ---------- Global Variables ---------- */
 struct process* head = NULL;
-int child_status;
+struct process* tail = NULL;
+int last_fg_child_status, last_bg_child_status;
 int exit_flag = 0;
+
+/* ----------------------------------------------------------------
+Function freeProcesses: Free the memory of all background processes
+in the linked list
+args~
+- process:			Background process		(struct process*)
+returns~
+0 when complete
+------------------------------------------------------------------- */
+int freeProcesses ()
+{
+	struct process* process = head;
+	struct process* next_process;
+
+	while(process != NULL) {
+		next_process = process->next;
+    	free(process);
+		process = next_process;
+  }
+	return 0;
+}
+
+/* ----------------------------------------------------------------
+Function addProcess: Create a process structure using dynamic
+memory allocation
+args~
+- pid:		Process ID		(int)
+returns~
+0 when complete
+------------------------------------------------------------------- */
+int addProcess (int pid)
+{
+	struct process* curr_process = malloc(sizeof(struct process));
+	curr_process->pid = pid;
+	curr_process->next = NULL;
+
+    if(head == NULL) {
+        head = curr_process;
+		tail = curr_process;
+    } else {
+        tail->next = curr_process;
+        tail = curr_process;
+    }
+	return 0;
+}
+
+/* ----------------------------------------------------------------
+Function removeProcess: Remove a process structure from the 
+linked list
+args~
+- pid:		Process ID		(int)
+returns~
+0 when complete
+------------------------------------------------------------------- */
+int removeProcess (int pid)
+{
+	struct process* process = head;
+	struct process* prev_process = NULL;
+
+	while (process != NULL) {
+		if (process->pid == pid && prev_process == NULL) {
+			head = process->next;
+			if (head == NULL) {
+				tail = NULL;
+			}
+			free(process);
+			process = NULL;
+		} else if (process->pid == pid) {
+			prev_process->next = process->next;
+			if (prev_process->next == NULL) {
+				tail = prev_process;
+			}
+			free(process);
+			process = NULL;
+		} else {
+			prev_process = process;
+			process = process->next;
+		}
+	}
+	return 0;
+}
 
 /* --------------------------------------------------------------------------------------------
 Function killAllProcesses: Terminate all processes
@@ -51,7 +133,6 @@ int killAllProcesses()
 {
 	while (head != NULL) {
     	kill(head->pid, SIGTERM);
-		free(head);
 		head = head->next; 
     }
 	exit_flag = 1;
@@ -152,6 +233,92 @@ int freeArgArray(char** execvp_args, int arr_count)
 }
 
 /* --------------------------------------------------------------------------------------------
+Function redirectInput: Redirects stdin into an input file
+args ~
+- curr_command:			Parsed Inline Command			(struct command_line*)
+----------------------------------------------------------------------------------------------- */
+int redirectInput(struct command_line* curr_command) {
+	int source_fd;
+	int redirect_input_fd;
+
+	if (curr_command->input_file != NULL) {
+		source_fd = open(curr_command->input_file, O_RDONLY, 0644);
+		if (source_fd == -1) { 
+			perror("source open()");
+			if (curr_command->is_bg) {
+				last_bg_child_status = 1;
+			} else {
+				last_fg_child_status = 1;
+			}
+		}
+		redirect_input_fd = dup2(source_fd, 0); // point stdin to input file
+		if (redirect_input_fd == -1) { 
+			perror("source dup2()");
+			if (curr_command->is_bg) {
+				last_bg_child_status = 1;
+			} else {
+				last_fg_child_status = 1;
+			}
+		}
+	} else {
+		source_fd = open("/dev/null", O_RDONLY, 0644);
+		if (source_fd == -1) { 
+			perror("source open()");
+			last_bg_child_status = 1;
+		}
+		redirect_input_fd = dup2(source_fd, 0); // point stdin to input file
+		if (redirect_input_fd == -1) { 
+			perror("source dup2()");
+			last_bg_child_status = 1;
+		}
+	} 
+	return 0;
+}
+
+/* --------------------------------------------------------------------------------------------
+Function redirectOutput: Redirects stdout into an output file
+args ~
+- curr_command:			Parsed Inline Command			(struct command_line*)
+----------------------------------------------------------------------------------------------- */
+int redirectOutput(struct command_line* curr_command) {
+	int dest_fd;
+	int redirect_output_fd;
+
+	if (curr_command->output_file != NULL) {
+		dest_fd = open(curr_command->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		if (dest_fd == -1) { 
+			perror("source open()");
+			if (curr_command->is_bg) {
+				last_bg_child_status = 1;
+			} else {
+				last_fg_child_status = 1;
+			}
+		}
+		redirect_output_fd = dup2(dest_fd, 1); // point stdout to output file
+		if (redirect_output_fd == -1) { 
+			perror("source dup2()");
+			if (curr_command->is_bg) {
+				last_bg_child_status = 1;
+			} else {
+				last_fg_child_status = 1;
+			}
+		} 
+	} else {
+		dest_fd = open("/dev/null", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		if (dest_fd == -1) { 
+			perror("source open()");
+			last_bg_child_status = 1;
+		}
+		redirect_output_fd = dup2(dest_fd, 1); // point stdout to output file
+		if (redirect_output_fd == -1) { 
+			perror("source dup2()");
+			last_bg_child_status = 1;
+		}
+	} 
+	return 0;
+}
+
+/* --------------------------------------------------------------------------------------------
 Function handleCommands: Determine if command is valid. If it is, then
 handle accordingly. This function is not for built in commands
 args ~
@@ -170,44 +337,42 @@ int handleCommands(struct command_line* curr_command)
 			break;
 
 		case 0:	// child process executes this branch
-			// redirect stdin if there is an input file
-			if (curr_command->input_file != NULL) {
-				int source_fd = open(curr_command->input_file, O_RDONLY, 0644);
-				if (source_fd == -1) { 
-    				perror("source open()");
-					child_status = 1;
-  				}
-				int redirect_input_fd = dup2(source_fd, 0); // point stdin to input file
-				if (redirect_input_fd == -1) { 
-    				perror("source dup2()");
-					child_status = 1;
-  				}
+			/* 
+			* redirect stdin if there is an input file, and if there isn't,
+			* redirect the stdin to "/dev/null" if bg process
+			*/ 
+			if (curr_command->input_file != NULL || curr_command->is_bg) {
+				redirectInput(curr_command);
 			}
 
-			// redirect stdout if there is an output file
-			if (curr_command->output_file != NULL) {
-				int dest_fd = open(curr_command->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-				if (dest_fd == -1) { 
-    				perror("dest open()"); 
-    				child_status = 1;
-  				}
-				int redirect_output_fd = dup2(dest_fd, 1); // point stdout to output file
-				if (redirect_output_fd == -1) { 
-    				perror("dest dup2()"); 
-    				child_status = 1; 
-  				}
+			/* 
+			* redirect stdout if there is an output file, and if there isn't,
+			* redirect the stdout to "/dev/null" if bg process
+			*/ 
+			if (curr_command->output_file != NULL || curr_command->is_bg) {
+				redirectOutput(curr_command);
 			}
 
 			// execute new process
 			execvp(curr_command->argv[0], execvp_args);
-			perror("execvp");	// this line is executed if execvp fails
-			child_status = 1;
+			perror("execvp");	// this line onwards is executed if execvp fails
+			if (curr_command->is_bg) {
+				last_bg_child_status = 1;
+			} else {
+				last_fg_child_status = 1;
+			}
 			exit(EXIT_FAILURE);
 			break;
 
 		default: // parent process executes this branch
-			spawn_pid = waitpid(spawn_pid, &child_status, 0);
+			if (curr_command->is_bg) {
+				spawn_pid = waitpid(spawn_pid, &last_bg_child_status, WNOHANG);
+
+			} else {
+				spawn_pid = waitpid(spawn_pid, &last_fg_child_status, 0);
+			}
 			break;
+			
 	}
 
 	freeArgArray(execvp_args, curr_command->argc);
@@ -227,6 +392,7 @@ struct command_line *parse_input()
 	struct command_line *curr_command = (struct command_line *) calloc(1, sizeof(struct command_line));
 	curr_command->input_file = NULL;
 	curr_command->output_file = NULL;
+	curr_command->is_bg = false;
 
 	// retrieve input from terminal
 	printf(": ");
