@@ -200,7 +200,7 @@ int handleCommands(struct command_line* curr_command)
 			}
 
 			// execute new process
-			execvp(curr_command->argv[1], execvp_args);
+			execvp(curr_command->argv[0], execvp_args);
 			perror("execvp");	// this line is executed if execvp fails
 			child_status = 1;
 			exit(EXIT_FAILURE);
