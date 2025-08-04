@@ -102,7 +102,7 @@ exit_flag is set if exit command is received, terminating the shell when returne
 ----------------------------------------------------------------------------------------------- */
 int handleBuiltInCommands(struct command_line* curr_command)
 {
-	char *built_in_functions[] = {"exit", "cd", "status"};
+	char *built_in_functions[] = {"exit", "cd", "status", "#"};
 	int i;
     for (i = 0; i < 3; i++) {
         if (!strcmp(built_in_functions[i], curr_command->argv[0])) {
@@ -258,7 +258,8 @@ int main()
 	while(!exit_flag)
 	{
 		curr_command = parse_input();
-		if (handleBuiltInCommands(curr_command)) {
+
+		if (handleBuiltInCommands(curr_command) || !strcmp(curr_command->argv[0], "#")) {
 			continue;
 		}
 
