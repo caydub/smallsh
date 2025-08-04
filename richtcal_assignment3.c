@@ -132,10 +132,10 @@ args ~
 ----------------------------------------------------------------------------------------------- */
 int createArgArray(struct command_line* curr_command, char* execvp_args[curr_command->argc])
 {
-	for (int i = 0; i < curr_command->argc - 1; i++) {
-		execvp_args[i] = strdup(curr_command->argv[i+1]);
+	for (int i = 0; i < curr_command->argc; i++) {
+		execvp_args[i] = strdup(curr_command->argv[i]);
 	}
-	execvp_args[curr_command->argc - 1] = NULL; // set last value of array to null
+	execvp_args[curr_command->argc] = NULL; // set last value of array to null
 	return 0;
 }
 
