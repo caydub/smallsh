@@ -259,7 +259,7 @@ int main()
 	{
 		curr_command = parse_input();
 
-		if (!strcmp(curr_command->argv[0], "#") || !strcmp(curr_command->argv[0][0], "#")) {
+		if (!strcmp(curr_command->argv[0], "#") || curr_command->argv[0][0] == "#") {
 			continue;
 		}
 
