@@ -31,6 +31,7 @@ struct command_line
 	char *input_file;
 	char *output_file;
 	bool is_bg;
+	bool is_empty;
 };
 
 /* ---------- Global Variables ---------- */
@@ -452,6 +453,7 @@ struct command_line *parse_input()
 	curr_command->input_file = NULL;
 	curr_command->output_file = NULL;
 	curr_command->is_bg = false;
+	curr_command->is_empty = true;
 
 	// retrieve input from terminal
 	printf(": ");
@@ -460,6 +462,9 @@ struct command_line *parse_input()
 
 	// parse input
 	char *token = strtok(input, " \n");
+	if (token) {
+		curr_command->is_empty = false;
+	}
 	while(token) {
 		// parse input while ignoring special characters
 		if(!strcmp(token,"<")) { // if redirect input later on
@@ -487,6 +492,10 @@ int main()
 		checkBgs();
 
 		curr_command = parse_input();
+
+		if (curr_command->is_empty) {
+			continue;
+		}
 
 		if (!strcmp(curr_command->argv[0], "#") || curr_command->argv[0][0] == '#') {
 			continue;
