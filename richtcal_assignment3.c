@@ -154,8 +154,6 @@ returns~
 int checkBgs () 
 {
 	struct process* process = head;
-	char status_message[32];
-
 	while (process != NULL) {
 		pid_t bg_pid = waitpid(process->pid, &last_bg_child_status, WNOHANG);
 		if (bg_pid) {
@@ -299,8 +297,10 @@ int redirectInput(struct command_line* curr_command) {
 			perror("source open()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
+				return -1;
 			} else {
 				last_fg_child_status = 1;
+				return -1;
 			}
 		}
 		redirect_input_fd = dup2(source_fd, 0); // point stdin to input file
@@ -308,8 +308,10 @@ int redirectInput(struct command_line* curr_command) {
 			perror("source dup2()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
+				return -1;
 			} else {
 				last_fg_child_status = 1;
+				return -1;
 			}
 		}
 	} else {
@@ -342,17 +344,21 @@ int redirectOutput(struct command_line* curr_command) {
 			perror("source open()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
+				return -1;
 			} else {
 				last_fg_child_status = 1;
-			}
+				return -1;
+			} 
 		}
 		redirect_output_fd = dup2(dest_fd, 1); // point stdout to output file
 		if (redirect_output_fd == -1) { 
 			perror("source dup2()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
+				return -1;
 			} else {
 				last_fg_child_status = 1;
+				return -1;
 			}
 		} 
 	} else {
@@ -394,7 +400,9 @@ int handleCommands(struct command_line* curr_command)
 			* redirect the stdin to "/dev/null" if bg process
 			*/ 
 			if (curr_command->input_file != NULL || curr_command->is_bg) {
-				redirectInput(curr_command);
+				if (redirectInput(curr_command) == -1) {
+					break;
+				}
 			}
 
 			/* 
@@ -402,7 +410,9 @@ int handleCommands(struct command_line* curr_command)
 			* redirect the stdout to "/dev/null" if bg process
 			*/ 
 			if (curr_command->output_file != NULL || curr_command->is_bg) {
-				redirectOutput(curr_command);
+				if (redirectOutput(curr_command) == -1) {
+					break;
+				}
 			}
 
 			// execute new process
@@ -420,7 +430,6 @@ int handleCommands(struct command_line* curr_command)
 			if (curr_command->is_bg) {
 				addProcess(spawn_pid);
 				printf("background pid is %d\n", spawn_pid);
-				fflush(stdout);
 				spawn_pid = waitpid(spawn_pid, &last_bg_child_status, WNOHANG);
 			} else {
 				spawn_pid = waitpid(spawn_pid, &last_fg_child_status, 0);
