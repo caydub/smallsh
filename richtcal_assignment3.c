@@ -427,6 +427,7 @@ int handleCommands(struct command_line* curr_command)
 		default: // parent process executes this branch
 			if (curr_command->is_bg) {
 				printf("background pid is %d\n", spawn_pid);
+				fflush(stdout);
 				addProcess(spawn_pid);
 				spawn_pid = waitpid(spawn_pid, &last_bg_child_status, WNOHANG);
 			} else {
