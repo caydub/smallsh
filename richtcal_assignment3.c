@@ -41,7 +41,6 @@ int last_fg_child_status = 0;
 int last_bg_child_status;
 int exit_flag = 0;
 
-
 /* ----------------------------------------------------------------
 Function freeProcesses: Free the memory of all background processes
 in the linked list
@@ -166,6 +165,7 @@ int checkBgs ()
 		}
 		process = process->next;
 	}
+	return 0;
 }
 
 /* --------------------------------------------------------------------------------------------
@@ -286,6 +286,8 @@ int freeArgArray(char** execvp_args, int arr_count)
 Function redirectInput: Redirects stdin into an input file
 args ~
 - curr_command:			Parsed Inline Command			(struct command_line*)
+returns ~
+0 if successful, -1 if not
 ----------------------------------------------------------------------------------------------- */
 int redirectInput(struct command_line* curr_command) {
 	int source_fd;
@@ -297,22 +299,20 @@ int redirectInput(struct command_line* curr_command) {
 			perror("source open()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
-				return -1;
 			} else {
 				last_fg_child_status = 1;
-				return -1;
 			}
+			return -1;
 		}
 		redirect_input_fd = dup2(source_fd, 0); // point stdin to input file
 		if (redirect_input_fd == -1) { 
 			perror("source dup2()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
-				return -1;
 			} else {
 				last_fg_child_status = 1;
-				return -1;
 			}
+			return -1;
 		}
 	} else {
 		source_fd = open("/dev/null", O_RDONLY, 0644);
@@ -333,6 +333,8 @@ int redirectInput(struct command_line* curr_command) {
 Function redirectOutput: Redirects stdout into an output file
 args ~
 - curr_command:			Parsed Inline Command			(struct command_line*)
+returns ~
+0 if successful, -1 if not
 ----------------------------------------------------------------------------------------------- */
 int redirectOutput(struct command_line* curr_command) {
 	int dest_fd;
@@ -344,22 +346,20 @@ int redirectOutput(struct command_line* curr_command) {
 			perror("source open()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
-				return -1;
 			} else {
 				last_fg_child_status = 1;
-				return -1;
-			} 
+			}
+			return -1;
 		}
 		redirect_output_fd = dup2(dest_fd, 1); // point stdout to output file
 		if (redirect_output_fd == -1) { 
 			perror("source dup2()");
 			if (curr_command->is_bg) {
 				last_bg_child_status = 1;
-				return -1;
 			} else {
 				last_fg_child_status = 1;
-				return -1;
 			}
+			return -1;
 		} 
 	} else {
 		dest_fd = open("/dev/null", O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -415,6 +415,14 @@ int handleCommands(struct command_line* curr_command)
 				}
 			}
 
+			struct sigaction default_SIGINT = {0};
+				default_SIGINT.sa_handler = SIG_DFL;
+				default_SIGINT.sa_flags = 0;
+
+			if (!curr_command->is_bg) {
+				sigaction(SIGINT, &default_SIGINT, NULL);
+			}
+			
 			// execute new process
 			execvp(curr_command->argv[0], execvp_args);
 			perror("execvp");	// this line onwards is executed if execvp fails
@@ -487,6 +495,12 @@ struct command_line *parse_input()
 int main()
 {
 	struct command_line *curr_command;
+	struct sigaction ignore_SIGINT = {0};
+		ignore_SIGINT.sa_handler = SIG_IGN;
+		ignore_SIGINT.sa_flags = 0;
+
+	// register ignore SIGINT to shell
+	sigaction(SIGINT, &ignore_SIGINT, NULL);
 
 	while(!exit_flag)
 	{
