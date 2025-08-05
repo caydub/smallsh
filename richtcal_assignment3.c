@@ -36,7 +36,8 @@ struct command_line
 /* ---------- Global Variables ---------- */
 struct process* head = NULL;
 struct process* tail = NULL;
-int last_fg_child_status, last_bg_child_status;
+int last_fg_child_status = 0;
+int last_bg_child_status;
 int exit_flag = 0;
 
 /* ----------------------------------------------------------------
@@ -121,6 +122,34 @@ int removeProcess (pid_t pid)
 }
 
 /* ----------------------------------------------------------------
+Function interpretTerminationStatus: Interpret the termination
+status of a process and return a string containing a status
+message
+args~
+- wstatus:			Termination status				(int)
+- msg_buffer:		String to store result			(char*)
+returns~
+0 if successful
+------------------------------------------------------------------- */
+int interpretTerminationStatus (int wstatus, char msg_buffer[32])
+{
+	char exit_message[22] = "exit value ";
+	char signal_message[32] = "terminated by signal ";
+	char convertedStatus[10];
+
+	// if exited normally
+	if (WIFEXITED(wstatus)) {
+		sprintf(convertedStatus, "%d", WEXITSTATUS(wstatus));
+		strcpy(msg_buffer, strcat(exit_message, convertedStatus));
+	// if exited abormally
+	} else { 
+		sprintf(convertedStatus, "%d", WTERMSIG(wstatus));
+		strcpy(msg_buffer, strcat(signal_message, convertedStatus));
+	}
+	return 0;
+}
+
+/* ----------------------------------------------------------------
 Function checkBgs: Check bg processes to see if any have terminated
 args~
 None
@@ -130,11 +159,13 @@ returns~
 int checkBgs () 
 {
 	struct process* process = head;
+	char status_message[32];
 
 	while (process != NULL) {
 		pid_t bg_pid = waitpid(process->pid, &last_bg_child_status, WNOHANG);
 		if (bg_pid) {
-			printf("background pid %d is done: \n", bg_pid);
+			interpretTerminationStatus(last_bg_child_status, status_message);
+			printf("background pid %d is done: %s\n", bg_pid, status_message);
 			fflush(stdout);
 			process = process->next;
 			removeProcess(bg_pid);
@@ -191,6 +222,10 @@ returns ~
 ----------------------------------------------------------------------------------------------- */
 int printStatus ()
 {
+	char status_message[32];
+	interpretTerminationStatus(last_fg_child_status, status_message);
+	printf("%s\n", status_message);
+	fflush(stdout);
 	return 0;
 }
 
