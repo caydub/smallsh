@@ -41,6 +41,7 @@ int last_fg_child_status = 0;
 int last_bg_child_status;
 int exit_flag = 0;
 
+
 /* ----------------------------------------------------------------
 Function freeProcesses: Free the memory of all background processes
 in the linked list
@@ -124,30 +125,23 @@ int removeProcess (pid_t pid)
 
 /* ----------------------------------------------------------------
 Function interpretTerminationStatus: Interpret the termination
-status of a process and return a string containing a status
+status of a process and print a status message
 message
 args~
 - wstatus:			Termination status				(int)
-- msg_buffer:		String to store result			(char*)
 returns~
 0 if successful
 ------------------------------------------------------------------- */
-int interpretTerminationStatus (int wstatus, char msg_buffer[32])
+int interpretTerminationStatus (int wstatus)
 {
-	char exit_message[22] = "exit value ";
-	char signal_message[32] = "terminated by signal ";
-	char convertedStatus[10];
-
 	// if exited normally
 	if (WIFEXITED(wstatus)) {
-		sprintf(convertedStatus, "%d", WEXITSTATUS(wstatus));
-		strcpy(msg_buffer, strcat(exit_message, convertedStatus));
+		printf("exit value %d\n", WEXITSTATUS(wstatus));
+		fflush(stdout);
 	// if exited abormally
-	} else { 
-		sprintf(convertedStatus, "%d", WTERMSIG(wstatus));
-		strcpy(msg_buffer, strcat(signal_message, convertedStatus));
+	} else {
+		printf("terminated by signal %d\n", WTERMSIG(wstatus));
 	}
-	return 0;
 }
 
 /* ----------------------------------------------------------------
@@ -165,8 +159,8 @@ int checkBgs ()
 	while (process != NULL) {
 		pid_t bg_pid = waitpid(process->pid, &last_bg_child_status, WNOHANG);
 		if (bg_pid) {
-			interpretTerminationStatus(last_bg_child_status, status_message);
-			printf("background pid %d is done: %s\n", bg_pid, status_message);
+			printf("background pid %d is done: ", bg_pid);
+			interpretTerminationStatus(last_bg_child_status);
 			fflush(stdout);
 			process = process->next;
 			removeProcess(bg_pid);
@@ -223,9 +217,7 @@ returns ~
 ----------------------------------------------------------------------------------------------- */
 int printStatus ()
 {
-	char status_message[32];
-	interpretTerminationStatus(last_fg_child_status, status_message);
-	printf("%s\n", status_message);
+	interpretTerminationStatus(last_fg_child_status);
 	fflush(stdout);
 	return 0;
 }
@@ -426,9 +418,9 @@ int handleCommands(struct command_line* curr_command)
 
 		default: // parent process executes this branch
 			if (curr_command->is_bg) {
+				addProcess(spawn_pid);
 				printf("background pid is %d\n", spawn_pid);
 				fflush(stdout);
-				addProcess(spawn_pid);
 				spawn_pid = waitpid(spawn_pid, &last_bg_child_status, WNOHANG);
 			} else {
 				spawn_pid = waitpid(spawn_pid, &last_fg_child_status, 0);
